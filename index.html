@@ -1,0 +1,320 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>새싹 출석체크</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-15px);
+        }
+      }
+      @keyframes popUp {
+        from {
+          transform: scale(0.8);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+
+  <script src="https://unpkg.com/react@17.0.2/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@17.0.2/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+  <script type="text/babel">
+    const root = document.getElementById("root");
+
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyA463QIANM7u3H9F-7m6z3dL-zRyus3YL4",
+      authDomain: "deahyun-qt-checkin.firebaseapp.com",
+      projectId: "deahyun-qt-checkin",
+      storageBucket: "deahyun-qt-checkin.firebasestorage.app",
+      messagingSenderId: "100238612464",
+      appId: "1:100238612464:web:e6e833eb1058492accaf35",
+      measurementId: "G-K6LRSX993S",
+    };
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+
+    function CustomPopup({ isOpen, onClose, children }) {
+      if (!isOpen) return null;
+
+      const popupStyles = {
+        overlay: {
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+        },
+        box: {
+          backgroundColor: "white",
+          padding: "40px 30px",
+          borderRadius: "20px",
+          boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+          textAlign: "center",
+          minWidth: "280px",
+          animation: "popUp 0.3s ease-out",
+        },
+        closeButton: {
+          marginTop: "15px",
+          padding: "10px 30px",
+          backgroundColor: "#4CAF50",
+          color: "white",
+          border: "none",
+          borderRadius: "20px",
+          fontSize: "16px",
+          fontWeight: "bold",
+          cursor: "pointer",
+          transition: "0.2s",
+        },
+      };
+
+      return (
+        <div style={popupStyles.overlay} onClick={onClose}>
+          <div style={popupStyles.box} onClick={(e) => e.stopPropagation()}>
+            {children}
+            <button style={popupStyles.closeButton} onClick={onClose}>
+              확인
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const PlantImage = ({ stage }) => {
+      let imagePath = "";
+      if (stage === 1) imagePath = "./img/seed.png";
+      else if (stage === 2) imagePath = "./img/sprout1.png";
+      else if (stage === 3) imagePath = "./img/sprout2.png";
+      else if (stage === 4) imagePath = "./img/bud.png";
+      else if (stage === 5) imagePath = "./img/flower.png";
+
+      return (
+        <img
+          src={imagePath}
+          alt={`식물 성장 단계 ${stage}`}
+          style={{
+            height: "220px",
+            animation: "bounce 2s infinite",
+            marginBottom: "30px",
+            objectFit: "contain",
+          }}
+        />
+      );
+    };
+
+    function App() {
+      const [isChecked, setIsChecked] = React.useState(false);
+      const [totalClicks, setTotalClicks] = React.useState(0);
+      const [isPopupOpen, setIsPopupOpen] = React.useState(false);
+
+      const getTodayDate = () => {
+        return new Date().toLocaleDateString();
+      };
+
+      const getStageName = (clicks) => {
+        if (clicks < 10) return "작은 씨앗";
+        if (clicks < 30) return "귀여운 새싹";
+        if (clicks < 60) return "푸른 식물";
+        if (clicks < 100) return "꽃봉오리";
+        return "활짝 핀 꽃";
+      };
+
+      const CountStage = (clicks) => {
+        let stage = 1;
+        let leftUntil = 10 - clicks;
+
+        if (clicks >= 10) {
+          stage = 2;
+          leftUntil = 30 - clicks;
+        }
+        if (clicks >= 30) {
+          stage = 3;
+          leftUntil = 60 - clicks;
+        }
+        if (clicks >= 60) {
+          stage = 4;
+          leftUntil = 100 - clicks;
+        }
+        if (clicks >= 100) {
+          stage = 5;
+          leftUntil = null;
+        }
+
+        return { stage, leftUntil };
+      };
+
+      const { stage, leftUntil } = CountStage(totalClicks);
+
+      React.useEffect(() => {
+        const lastCheckInDate = localStorage.getItem("lastCheckInDate");
+        const today = getTodayDate();
+
+        if (lastCheckInDate === today) {
+          setIsChecked(true);
+        }
+
+        const docRef = db.collection("attendance").doc("stats");
+
+        docRef.get().then((doc) => {
+          if (!doc.exists) {
+            docRef.set({ totalClicks: 0 });
+          }
+        });
+
+        const unsubscribe = docRef.onSnapshot((doc) => {
+          if (doc.exists) {
+            setTotalClicks(doc.data().totalClicks);
+          }
+        });
+
+        return () => unsubscribe();
+      }, []);
+
+      const onClick = () => {
+        setIsChecked(true);
+
+        const today = getTodayDate();
+        localStorage.setItem("lastCheckInDate", today);
+
+        const docRef = db.collection("attendance").doc("stats");
+        docRef.update({
+          totalClicks: firebase.firestore.FieldValue.increment(1),
+        });
+
+        setIsPopupOpen(true);
+      };
+
+      const closePopup = () => {
+        setIsPopupOpen(false);
+      };
+
+      const styles = {
+        container: {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          width: "100%", // 🌟 100vh 대신 100%를 사용하여 스크롤 방지
+          backgroundColor: "#F1F8E9",
+          fontFamily: "sans-serif",
+          boxSizing: "border-box",
+        },
+        title: {
+          fontSize: "28px",
+          fontWeight: "bold",
+          marginBottom: "10px",
+          color: "#2E7D32",
+          textAlign: "center",
+        },
+        counter: {
+          fontSize: "16px",
+          marginBottom: "15px",
+          color: "#555",
+          textAlign: "center",
+        },
+        statusMessage: {
+          fontSize: "16px",
+          marginBottom: "30px",
+          color: "#F06292",
+          fontWeight: "bold",
+        },
+        button: {
+          padding: "14px 40px",
+          fontSize: "18px",
+          fontWeight: "bold",
+          color: "white",
+          border: "none",
+          borderRadius: "30px",
+          boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+          transition: "background-color 0.3s ease",
+          backgroundColor: isChecked ? "#A5D6A7" : "#4CAF50",
+          cursor: isChecked ? "not-allowed" : "pointer",
+        },
+        popupText: {
+          fontSize: "18px",
+          fontWeight: "bold",
+          color: "#333",
+          lineHeight: "1.6",
+        },
+      };
+
+      return (
+        <div style={styles.container}>
+          <div style={styles.title}>
+            큐티반
+            <br />
+            출석체크
+          </div>
+          <div style={styles.counter}>
+            현재까지 <strong>{totalClicks}</strong>번 출석했어요
+            <br />
+            {leftUntil === null ? (
+              "꽃이 다 자랐어요!🌸"
+            ) : (
+              <>
+                다음 단계까지 <strong>{leftUntil}</strong>번 남았어요!
+              </>
+            )}
+          </div>
+          <div style={styles.statusMessage}>[{getStageName(totalClicks)}]</div>
+
+          <PlantImage stage={CountStage(totalClicks).stage} />
+
+          <button onClick={onClick} disabled={isChecked} style={styles.button}>
+            {isChecked ? "출석완료" : "출석체크"}
+          </button>
+
+          <CustomPopup isOpen={isPopupOpen} onClose={closePopup}>
+            <div style={styles.popupText}>오늘도 출석 완료!</div>
+          </CustomPopup>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, root);
+  </script>
+</html>
