@@ -190,17 +190,37 @@
 
       React.useEffect(() => {
         const lastCheckInDate = localStorage.getItem("lastCheckInDate");
-        const today = getTodayDate();
+        const todayDate = getTodayDate();
 
-        if (lastCheckInDate === today) {
+        if (lastCheckInDate === todayDate) {
           setIsChecked(true);
         }
+
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
         const docRef = db.collection("attendance").doc("stats");
 
         docRef.get().then((doc) => {
           if (!doc.exists) {
-            docRef.set({ totalClicks: 0 });
+            docRef.set({
+              totalClicks: 0,
+              lastResetMonth: currentMonth,
+              history: {},
+            });
+          } else {
+            const data = doc.data();
+
+            if (data.lastResetMonth !== currentMonth) {
+              const pastClicks = data.totalClicks;
+              const pastMonth = data.lastResetMonth;
+
+              docRef.update({
+                totalClicks: 0,
+                lastResetMonth: currentMonth,
+                [`history.${pastMonth}`]: pastClicks,
+              });
+            }
           }
         });
 
