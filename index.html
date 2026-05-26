@@ -207,42 +207,75 @@
           setIsChecked(true);
         }
 
-        const now = new Date();
-        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        // 이미지 미리 불러오기 (화면 깜빡임 방지)
+        const preloadImages = [
+          "./img/seed.png",
+          "./img/sprout1.png",
+          "./img/sprout2.png",
+          "./img/bud.png",
+          "./img/flower.png",
+        ];
+        preloadImages.forEach((src) => {
+          const img = new Image();
+          img.src = src;
+        });
 
         const docRef = db.collection("attendance").doc("stats");
 
-        docRef.get().then((doc) => {
-          if (!doc.exists) {
-            docRef.set({
-              totalClicks: 0,
-              lastResetMonth: currentMonth,
-              history: {},
-            });
-          } else {
-            const data = doc.data();
+        const unsubscribe = docRef.onSnapshot(
+          (doc) => {
+            const now = new Date();
+            const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-            if (data.lastResetMonth !== currentMonth) {
-              const pastClicks = data.totalClicks;
-              const pastMonth = data.lastResetMonth;
-
-              docRef.update({
+            if (!doc.exists) {
+              // 1. 처음 DB가 만들어질 때
+              docRef.set({
                 totalClicks: 0,
                 lastResetMonth: currentMonth,
-                [`history.${pastMonth}`]: pastClicks,
+                history: {},
               });
+              setTotalClicks(0);
+              setIsLoading(false); // 🌟 로딩 끝!
+            } else {
+              const data = doc.data();
+
+              // 2. 예전에 만들어둔 DB라서 '달 정보'가 아예 없는 경우 (리셋 방지)
+              if (!data.lastResetMonth) {
+                docRef
+                  .update({ lastResetMonth: currentMonth })
+                  .catch(console.error);
+                setTotalClicks(data.totalClicks); // 기존 클릭수 유지
+                setIsLoading(false); // 🌟 로딩 끝!
+              }
+              // 3. 달이 진짜로 바뀌었을 때 (기록 저장 및 0으로 초기화)
+              else if (data.lastResetMonth !== currentMonth) {
+                const pastClicks = data.totalClicks;
+                const pastMonth = data.lastResetMonth;
+
+                docRef
+                  .update({
+                    totalClicks: 0,
+                    lastResetMonth: currentMonth,
+                    [`history.${pastMonth}`]: pastClicks,
+                  })
+                  .catch(console.error);
+
+                setTotalClicks(0);
+                setIsLoading(false); // 🌟 로딩 끝!
+              }
+              // 4. 달이 그대로일 때 (정상 출력)
+              else {
+                setTotalClicks(data.totalClicks);
+                setIsLoading(false); // 🌟 로딩 끝!
+              }
             }
-          }
-        });
-
-        const unsubscribe = docRef.onSnapshot((doc) => {
-          if (doc.exists) {
-            setTotalClicks(doc.data().totalClicks);
-
-            // 🌟 3. 데이터를 성공적으로 가져오면 로딩 상태를 해제합니다.
+          },
+          (error) => {
+            // 🚨 혹시라도 파이어베이스 에러가 발생하면 스피너가 멈추지 않는 것을 방지
+            console.error(error);
             setIsLoading(false);
-          }
-        });
+          },
+        );
 
         return () => unsubscribe();
       }, []);
